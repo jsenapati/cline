@@ -129,7 +129,7 @@ To contribute to the project, start with our [Contributing Guide](CONTRIBUTING.m
     ```bash
     code cline
     ```
-3. Install the necessary dependencies for the extension and webview-gui:
+3. Install the necessary dependencies for the extension and webview-gui (make sure to use the Node.js version specified in `.nvmrc`):
     ```bash
     npm run install:all
     ```
