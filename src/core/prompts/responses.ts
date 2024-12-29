@@ -1,6 +1,21 @@
-import { Anthropic } from "@anthropic-ai/sdk"
 import * as path from "path"
 import * as diff from "diff"
+
+export interface ImageBlock {
+  type: "image"
+  source: {
+    type: "base64"
+    media_type: string
+    data: string
+  }
+}
+
+export interface TextBlock {
+  type: "text"
+  text: string
+}
+
+export type Block = TextBlock | ImageBlock
 
 export const formatResponse = {
 	toolDenied: () => `The user denied this operation.`,
@@ -34,18 +49,12 @@ Otherwise, if you have not completed the task and do not need additional informa
 	toolResult: (
 		text: string,
 		images?: string[],
-	): string | Array<Anthropic.TextBlockParam | Anthropic.ImageBlockParam> => {
-		if (images && images.length > 0) {
-			const textBlock: Anthropic.TextBlockParam = { type: "text", text }
-			const imageBlocks: Anthropic.ImageBlockParam[] = formatImagesIntoBlocks(images)
-			// Placing images after text leads to better results
-			return [textBlock, ...imageBlocks]
-		} else {
-			return text
-		}
+	): string => {
+		// For now, just return the text since we're simplifying to text-only
+		return text
 	},
 
-	imageBlocks: (images?: string[]): Anthropic.ImageBlockParam[] => {
+	imageBlocks: (images?: string[]): ImageBlock[] => {
 		return formatImagesIntoBlocks(images)
 	},
 
@@ -98,7 +107,7 @@ Otherwise, if you have not completed the task and do not need additional informa
 }
 
 // to avoid circular dependency
-const formatImagesIntoBlocks = (images?: string[]): Anthropic.ImageBlockParam[] => {
+const formatImagesIntoBlocks = (images?: string[]): ImageBlock[] => {
 	return images
 		? images.map((dataUrl) => {
 				// data:image/png;base64,base64string
@@ -107,7 +116,7 @@ const formatImagesIntoBlocks = (images?: string[]): Anthropic.ImageBlockParam[] 
 				return {
 					type: "image",
 					source: { type: "base64", media_type: mimeType, data: base64 },
-				} as Anthropic.ImageBlockParam
+				}
 			})
 		: []
 }
