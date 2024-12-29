@@ -20,6 +20,25 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./"
   },
+  "contributes": {
+    "commands": [{
+      "command": "simple-cline.startChat",
+      "title": "Simple Cline: Start Chat"
+    }],
+    "configuration": {
+      "title": "Simple Cline",
+      "properties": {
+        "simpleCline.openaiApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "OpenAI API Key for chat completion"
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "openai": "^4.0.0"
+  },
   "devDependencies": {
     "@types/node": "^22.10.2",
     "@types/vscode": "^1.96.0",

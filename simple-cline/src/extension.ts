@@ -1,7 +1,18 @@
 import * as vscode from 'vscode';
+import OpenAI from 'openai';
 
 export function activate(context: vscode.ExtensionContext) {
-    let disposable = vscode.commands.registerCommand('simple-cline.startChat', () => {
+    let disposable = vscode.commands.registerCommand('simple-cline.startChat', async () => {
+        const config = vscode.workspace.getConfiguration('simpleCline');
+        const apiKey = config.get<string>('openaiApiKey');
+
+        if (!apiKey) {
+            vscode.window.showErrorMessage('Please set your OpenAI API key in settings (simpleCline.openaiApiKey)');
+            return;
+        }
+
+        const openai = new OpenAI({ apiKey });
+
         // Create and show panel
         const panel = vscode.window.createWebviewPanel(
             'simpleCline',
@@ -15,15 +26,28 @@ export function activate(context: vscode.ExtensionContext) {
 
         // Handle messages from the webview
         panel.webview.onDidReceiveMessage(
-            message => {
+            async message => {
                 switch (message.command) {
                     case 'sendMessage':
-                        // Echo back the message for now
-                        const response = `Echo: ${message.text}`;
-                        panel.webview.postMessage({ 
-                            type: 'response',
-                            text: response
-                        });
+                        try {
+                            const completion = await openai.chat.completions.create({
+                                model: "gpt-3.5-turbo",
+                                messages: [{ role: "user", content: message.text }],
+                            });
+
+                            const response = completion.choices[0]?.message?.content || "No response received";
+                            panel.webview.postMessage({ 
+                                type: 'response',
+                                text: response
+                            });
+                        } catch (error) {
+                            const errorMessage = error instanceof Error ? error.message : 'An error occurred';
+                            vscode.window.showErrorMessage(`OpenAI API Error: ${errorMessage}`);
+                            panel.webview.postMessage({ 
+                                type: 'response',
+                                text: `Error: ${errorMessage}`
+                            });
+                        }
                         break;
                 }
             },
