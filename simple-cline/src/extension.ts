@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import OpenAI from 'openai';
 
 export function activate(context: vscode.ExtensionContext) {
     let disposable = vscode.commands.registerCommand('simple-cline.startChat', () => {
@@ -15,15 +16,38 @@ export function activate(context: vscode.ExtensionContext) {
 
         // Handle messages from the webview
         panel.webview.onDidReceiveMessage(
-            message => {
+            async message => {
                 switch (message.command) {
                     case 'sendMessage':
-                        // Echo back the message for now
-                        const response = `Echo: ${message.text}`;
-                        panel.webview.postMessage({ 
-                            type: 'response',
-                            text: response
-                        });
+                        const apiKey = vscode.workspace.getConfiguration().get<string>('simpleCline.openaiApiKey');
+                        
+                        if (!apiKey) {
+                            panel.webview.postMessage({
+                                type: 'response',
+                                text: 'Error: OpenAI API key not configured. Please set it in VSCode settings under "simpleCline.openaiApiKey".'
+                            });
+                            return;
+                        }
+
+                        const openai = new OpenAI({ apiKey });
+
+                        try {
+                            const response = await openai.chat.completions.create({
+                                model: 'gpt-3.5-turbo',
+                                messages: [{ role: 'user', content: message.text }]
+                            });
+
+                            const text = response.choices[0]?.message?.content ?? '(No response)';
+                            panel.webview.postMessage({
+                                type: 'response',
+                                text: text
+                            });
+                        } catch (error) {
+                            panel.webview.postMessage({
+                                type: 'response',
+                                text: 'Error calling OpenAI: ' + (error instanceof Error ? error.message : String(error))
+                            });
+                        }
                         break;
                 }
             },

@@ -6,14 +6,29 @@
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Other"],
+  "categories": [
+    "Other"
+  ],
   "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {
-    "commands": [{
-      "command": "simple-cline.startChat",
-      "title": "Simple Cline: Start Chat"
-    }]
+    "configuration": {
+      "type": "object",
+      "title": "Simple Cline Configuration",
+      "properties": {
+        "simpleCline.openaiApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "OpenAI API Key"
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "simple-cline.startChat",
+        "title": "Simple Cline: Start Chat"
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
@@ -27,5 +42,8 @@
     "@typescript-eslint/parser": "^8.18.2",
     "eslint": "^9.17.0",
     "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "openai": "^4.77.0"
   }
 }
