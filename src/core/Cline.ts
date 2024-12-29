@@ -1,41 +1,25 @@
-import { Anthropic } from "@anthropic-ai/sdk"
-import cloneDeep from "clone-deep"
-import delay from "delay"
 import fs from "fs/promises"
 import os from "os"
 import pWaitFor from "p-wait-for"
 import * as path from "path"
-import { serializeError } from "serialize-error"
 import * as vscode from "vscode"
 import { ApiHandler, buildApiHandler } from "../api"
 import { ApiStream } from "../api/transform/stream"
 import { DiffViewProvider } from "../integrations/editor/DiffViewProvider"
-import { findToolName, formatContentBlockToMarkdown } from "../integrations/misc/export-markdown"
-import { extractTextFromFile } from "../integrations/misc/extract-text"
 import { TerminalManager } from "../integrations/terminal/TerminalManager"
-import { BrowserSession } from "../services/browser/BrowserSession"
-import { UrlContentFetcher } from "../services/browser/UrlContentFetcher"
 import { listFiles } from "../services/glob/list-files"
-import { regexSearchFiles } from "../services/ripgrep"
-import { parseSourceCodeForDefinitionsTopLevel } from "../services/tree-sitter"
 import { ApiConfiguration } from "../shared/api"
 import { findLastIndex } from "../shared/array"
 import { AutoApprovalSettings } from "../shared/AutoApprovalSettings"
 import { combineApiRequests } from "../shared/combineApiRequests"
 import { combineCommandSequences, COMMAND_REQ_APP_STRING } from "../shared/combineCommandSequences"
 import {
-	BrowserAction,
-	BrowserActionResult,
-	browserActions,
-	ClineApiReqCancelReason,
-	ClineApiReqInfo,
 	ClineAsk,
-	ClineAskUseMcpServer,
 	ClineMessage,
 	ClineSay,
-	ClineSayBrowserAction,
 	ClineSayTool,
 } from "../shared/ExtensionMessage"
+import { ApiReqInfo, ApiReqCancelReason } from "../shared/types"
 import { getApiMetrics } from "../shared/getApiMetrics"
 import { HistoryItem } from "../shared/HistoryItem"
 import { ClineAskResponse } from "../shared/WebviewMessage"
@@ -45,7 +29,7 @@ import { arePathsEqual, getReadablePath } from "../utils/path"
 import { AssistantMessageContent, parseAssistantMessage, ToolParamName, ToolUseName } from "./assistant-message"
 import { constructNewFileContent } from "./assistant-message/diff"
 import { parseMentions } from "./mentions"
-import { formatResponse } from "./prompts/responses"
+import { formatResponse, Block, ImageBlock, TextBlock } from "./prompts/responses"
 import { addUserInstructions, SYSTEM_PROMPT } from "./prompts/system"
 import { truncateHalfConversation } from "./sliding-window"
 import { ClineProvider, GlobalFileNames } from "./webview/ClineProvider"
@@ -54,21 +38,17 @@ import { showSystemNotification } from "../integrations/notifications"
 const cwd =
 	vscode.workspace.workspaceFolders?.map((folder) => folder.uri.fsPath).at(0) ?? path.join(os.homedir(), "Desktop") // may or may not exist but fs checking existence would immediately ask for permission which would be bad UX, need to come up with a better solution
 
-type ToolResponse = string | Array<Anthropic.TextBlockParam | Anthropic.ImageBlockParam>
-type UserContent = Array<
-	Anthropic.TextBlockParam | Anthropic.ImageBlockParam | Anthropic.ToolUseBlockParam | Anthropic.ToolResultBlockParam
->
+type ToolResponse = string
+type UserContent = Array<any> // TODO: Replace with OpenAI types
 
 export class Cline {
 	readonly taskId: string
 	api: ApiHandler
 	private terminalManager: TerminalManager
-	private urlContentFetcher: UrlContentFetcher
-	private browserSession: BrowserSession
 	private didEditFile: boolean = false
 	customInstructions?: string
 	autoApprovalSettings: AutoApprovalSettings
-	apiConversationHistory: Anthropic.MessageParam[] = []
+	apiConversationHistory: any[] = [] // TODO: Replace with OpenAI types
 	clineMessages: ClineMessage[] = []
 	private askResponse?: ClineAskResponse
 	private askResponseText?: string
@@ -87,7 +67,7 @@ export class Cline {
 	private assistantMessageContent: AssistantMessageContent[] = []
 	private presentAssistantMessageLocked = false
 	private presentAssistantMessageHasPendingUpdates = false
-	private userMessageContent: (Anthropic.TextBlockParam | Anthropic.ImageBlockParam)[] = []
+	private userMessageContent: Block[] = []
 	private userMessageContentReady = false
 	private didRejectTool = false
 	private didAlreadyUseTool = false
@@ -105,8 +85,6 @@ export class Cline {
 		this.providerRef = new WeakRef(provider)
 		this.api = buildApiHandler(apiConfiguration)
 		this.terminalManager = new TerminalManager()
-		this.urlContentFetcher = new UrlContentFetcher(provider.context)
-		this.browserSession = new BrowserSession(provider.context)
 		this.diffViewProvider = new DiffViewProvider(cwd)
 		this.customInstructions = customInstructions
 		this.autoApprovalSettings = autoApprovalSettings
@@ -133,7 +111,7 @@ export class Cline {
 		return taskDir
 	}
 
-	private async getSavedApiConversationHistory(): Promise<Anthropic.MessageParam[]> {
+	private async getSavedApiConversationHistory(): Promise<any[]> {
 		const filePath = path.join(await this.ensureTaskDirectoryExists(), GlobalFileNames.apiConversationHistory)
 		const fileExists = await fileExistsAtPath(filePath)
 		if (fileExists) {
@@ -142,12 +120,12 @@ export class Cline {
 		return []
 	}
 
-	private async addToApiConversationHistory(message: Anthropic.MessageParam) {
+	private async addToApiConversationHistory(message: any) {
 		this.apiConversationHistory.push(message)
 		await this.saveApiConversationHistory()
 	}
 
-	private async overwriteApiConversationHistory(newHistory: Anthropic.MessageParam[]) {
+	private async overwriteApiConversationHistory(newHistory: any[]) {
 		this.apiConversationHistory = newHistory
 		await this.saveApiConversationHistory()
 	}
@@ -442,7 +420,7 @@ export class Cline {
 		)
 		if (lastApiReqStartedIndex !== -1) {
 			const lastApiReqStarted = modifiedClineMessages[lastApiReqStartedIndex]
-			const { cost, cancelReason }: ClineApiReqInfo = JSON.parse(lastApiReqStarted.text || "{}")
+			const { cost, cancelReason }: ApiReqInfo = JSON.parse(lastApiReqStarted.text || "{}")
 			if (cost === undefined && cancelReason === undefined) {
 				modifiedClineMessages.splice(lastApiReqStartedIndex, 1)
 			}
